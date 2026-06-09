@@ -1,56 +1,47 @@
-import { chromium } from 'playwright'
+import { parse } from 'node-html-parser'
 import { PageContent } from './types'
 
 export async function scrapePages(urls: string[]): Promise<PageContent[]> {
-  const browser = await chromium.launch({ headless: true })
-  const results: PageContent[] = []
+  return Promise.all(urls.map(scrapeOne))
+}
 
-  for (const url of urls) {
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+async function scrapeOne(url: string): Promise<PageContent> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+      signal: AbortSignal.timeout(10000),
     })
-    const page = await context.newPage()
 
-    try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
-      const content = await page.evaluate(() => {
-        const headings = Array.from(document.querySelectorAll('h1, h2, h3'))
-          .map(h => `${h.tagName}: ${h.textContent?.trim()}`)
-          .filter(h => h.length > 5)
-          .slice(0, 30)
+    const html = await res.text()
+    const root = parse(html)
 
-        const bodyText = document.body.innerText
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 3000)
+    root.querySelectorAll('script, style, nav, footer, header').forEach(el => el.remove())
 
-        const title = document.title
+    const title = root.querySelector('title')?.text?.trim() ?? ''
 
-        return { title, headings, bodyText }
-      })
+    const headings = root.querySelectorAll('h1, h2, h3')
+      .map(h => `${h.tagName}: ${h.text?.trim()}`)
+      .filter(h => h.length > 5)
+      .slice(0, 30)
 
-      results.push({
-        url,
-        title: content.title,
-        headings: content.headings,
-        bodyText: content.bodyText,
-        wordCount: content.bodyText.split(' ').length,
-      })
-    } catch (err) {
-      results.push({
-        url,
-        title: '',
-        headings: [],
-        bodyText: '',
-        wordCount: 0,
-        error: err instanceof Error ? err.message : 'Scraping failed',
-      })
-    } finally {
-      await context.close()
+    const bodyEl = root.querySelector('main') ?? root.querySelector('article') ?? root.querySelector('body')
+    const bodyText = bodyEl?.text?.replace(/\s+/g, ' ')?.trim()?.slice(0, 3000) ?? ''
+
+    return { url, title, headings, bodyText, wordCount: bodyText.split(' ').length }
+  } catch (err) {
+    return {
+      url,
+      title: '',
+      headings: [],
+      bodyText: '',
+      wordCount: 0,
+      error: err instanceof Error ? err.message : 'Scraping failed',
     }
   }
-
-  await browser.close()
-  return results
 }

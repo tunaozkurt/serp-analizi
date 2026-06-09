@@ -4,19 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npx playwright install chromium --with-deps && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
     "next": "16.2.7",
-    "playwright": "^1.60.0",
+    "node-html-parser": "^7.0.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "serpapi": "^2.2.1"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.10.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
